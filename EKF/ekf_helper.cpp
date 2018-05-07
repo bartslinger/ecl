@@ -247,6 +247,9 @@ void Ekf::resetHeight()
 			_state.pos(2) = _ev_sample_delayed.posNED(2);
 		}
 
+        // reset the baro offset which is subtracted from the baro reading if we need to use it as a backup
+        const baroSample& baro_newest = _baro_buffer.get_newest();
+        _baro_hgt_offset = baro_newest.hgt + _state.pos(2);
 	}
 
 	// reset the vertical velocity covariance values

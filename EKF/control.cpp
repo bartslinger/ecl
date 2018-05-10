@@ -311,7 +311,7 @@ void Ekf::controlExternalVisionFusion()
 			fuseHeading();
 
 		}
-	} else if (_control_status.flags.ev_pos && (_time_last_imu - _time_last_ext_vision > (uint64_t)5e6)) {
+	} else if (_control_status.flags.ev_pos && (_time_last_imu - _time_last_ext_vision > (uint64_t)5e5) /* 500 ms */) {
 		// Turn off EV fusion mode if no data has been received
 		_control_status.flags.ev_pos = false;
 		ECL_INFO("EKF External Vision Data Stopped");

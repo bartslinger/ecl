@@ -1596,3 +1596,15 @@ void Ekf::get_ekf2ev_quaternion(float *quat)
 	}
 }
 
+// return the quaternion defining the rotation from the EKF to the External Vision reference frame
+void Ekf::get_local_vision_offset(float local_vision_offset[2])
+{
+	local_vision_offset[0] = _local_vision_offset(0);
+	local_vision_offset[1] = _local_vision_offset(1);
+}
+
+void Ekf::get_local_vision_offset_updated(bool *updated)
+{
+	*updated = _local_vision_offset_updated;
+}
+

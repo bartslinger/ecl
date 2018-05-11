@@ -106,6 +106,9 @@ bool Ekf::update()
 		}
 	}
 
+	// Reset check for new exernal vision data
+	_local_vision_offset_updated = false;
+
 	// Only run the filter if IMU data in the buffer has been updated
 	if (_imu_updated) {
 

@@ -232,6 +232,11 @@ public:
 	// return the quaternion defining the rotation from the EKF to the External Vision reference frame
 	void get_ekf2ev_quaternion(float *quat);
 
+	// return vision reference offset wrt state origin
+	void get_local_vision_offset(float local_vision_offset[2]);
+
+	void get_local_vision_offset_updated(bool *updated);
+
 private:
 
 	static constexpr uint8_t _k_num_states{24};		///< number of EKF states
@@ -283,6 +288,7 @@ private:
 	// variables used when vision position data is used locally in combination with gps
 	bool _local_vision_method{true};	///< true when using vision for better accuracy around home location
 	Vector2f _local_vision_offset{0,0};	///< difference between vision position estimate and lpos to prevent estimator jumps when switching
+	bool _local_vision_offset_updated{false};///< true if the value has been updated during this cycle
 
 	// booleans true when fresh sensor data is available at the fusion time horizon
 	bool _gps_data_ready{false};	///< true when new GPS data has fallen behind the fusion time horizon and is available to be fused

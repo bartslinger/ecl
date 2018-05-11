@@ -159,6 +159,11 @@ void Ekf::controlExternalVisionFusion()
 	// Check for new exernal vision data
 	if (_ev_data_ready) {
 
+		if (_local_vision_method && !_control_status.flags.gps) {
+			// need gps for this method (for initialization and as fallback)
+			return;
+		}
+
 		// if the ev data is not in a NED reference frame, then the transformation between EV and EKF navigation frames
 		// needs to be calculated and the observations rotated into the EKF frame of reference
 		if ((_params.fusion_mode & MASK_ROTATE_EV) && (_params.fusion_mode & MASK_USE_EVPOS) && !(_params.fusion_mode & MASK_USE_EVYAW)) {
@@ -181,7 +186,9 @@ void Ekf::controlExternalVisionFusion()
 					_local_vision_offset(0) = _ev_sample_delayed.posNED(0) - _state.pos(0);
 					_local_vision_offset(1) = _ev_sample_delayed.posNED(1) - _state.pos(1);
 					setDiag(P,7,8,sq(_ev_sample_delayed.posErr));
-					PX4_INFO("Offset: %1.2f, %1.2f", (double)_local_vision_offset(0), (double)_local_vision_offset(1));
+
+					// Notify vision position update in order to set home position correctly
+					_local_vision_offset_updated = true;
 
 				} else if (_control_status.flags.gps) {
 					_fuse_hpos_as_odom = true;

@@ -280,6 +280,10 @@ private:
 	Dcmf _ev_rot_mat;			///< transformation matrix that rotates observations from the EV to the EKF navigation frame
 	uint64_t _ev_rot_last_time_us{0};	///< previous time that the calculation of the ekf to ev rotation matrix was updated (uSec)
 
+	// variables used when vision position data is used locally in combination with gps
+	bool _local_vision_method{true};	///< true when using vision for better accuracy around home location
+	Vector2f _local_vision_offset{0,0};	///< difference between vision position estimate and lpos to prevent estimator jumps when switching
+
 	// booleans true when fresh sensor data is available at the fusion time horizon
 	bool _gps_data_ready{false};	///< true when new GPS data has fallen behind the fusion time horizon and is available to be fused
 	bool _mag_data_ready{false};	///< true when new magnetometer data has fallen behind the fusion time horizon and is available to be fused

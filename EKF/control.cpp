@@ -126,6 +126,16 @@ void Ekf::controlFusionModes()
 	controlDragFusion();
 	controlHeightFusion();
 
+	if (_local_vision_method && _control_status.flags.gps && _control_status.flags.ev_pos) {
+		// Don't fuse GPS position, use vision instead. Still fusing GPS velocity.
+		_fuse_pos = false;
+		if (_control_status.flags.ev_hgt) {
+			// We can actually consider to keep using baro together with vision
+			// But for now, we don't
+			_fuse_height = false;
+		}
+	}
+
 	// For efficiency, fusion of direct state observations for position and velocity is performed sequentially
 	// in a single function using sensor data from multiple sources (GPS, baro, range finder, etc)
 	controlVelPosFusion();
@@ -166,7 +176,14 @@ void Ekf::controlExternalVisionFusion()
 
 				// reset the position if we are not already aiding using GPS, else use a relative position
 				// method for fusing the position data
-				if (_control_status.flags.gps) {
+				if (_local_vision_method && _control_status.flags.gps) {
+					// set offset of the vision measurements wrt estimator
+					_local_vision_offset(0) = _ev_sample_delayed.posNED(0) - _state.pos(0);
+					_local_vision_offset(1) = _ev_sample_delayed.posNED(1) - _state.pos(1);
+					setDiag(P,7,8,sq(_ev_sample_delayed.posErr));
+					PX4_INFO("Offset: %1.2f, %1.2f", (double)_local_vision_offset(0), (double)_local_vision_offset(1));
+
+				} else if (_control_status.flags.gps) {
 					_fuse_hpos_as_odom = true;
 
 				} else {
@@ -252,8 +269,12 @@ void Ekf::controlExternalVisionFusion()
 			_ev_sample_delayed.posNED(1) -= pos_offset_earth(1);
 			_ev_sample_delayed.posNED(2) -= pos_offset_earth(2);
 
+			// subtract vision offset for local vision method
+			_ev_sample_delayed.posNED(0) -= _local_vision_offset(0);
+			_ev_sample_delayed.posNED(1) -= _local_vision_offset(1);
+
 			// Use an incremental position fusion method for EV data if using GPS or if the observations are not in NED
-			if (_control_status.flags.gps || (_params.fusion_mode & MASK_ROTATE_EV)) {
+			if ((_control_status.flags.gps || (_params.fusion_mode & MASK_ROTATE_EV)) && !_local_vision_method) {
 				_fuse_hpos_as_odom = true;
 			} else {
 				_fuse_hpos_as_odom = false;
@@ -311,9 +332,21 @@ void Ekf::controlExternalVisionFusion()
 			fuseHeading();
 
 		}
-	} else if (_control_status.flags.ev_pos && (_time_last_imu - _time_last_ext_vision > (uint64_t)5e5) /* 500 ms */) {
+	} else if (_control_status.flags.ev_pos && (_time_last_imu - _time_last_ext_vision > (uint64_t)7e5) /* 700 ms */) {
 		// Turn off EV fusion mode if no data has been received
 		_control_status.flags.ev_pos = false;
+		if (_local_vision_method && _control_status.flags.gps) {
+			PX4_INFO("GPS variance set");
+			// reset position estimate to GPS (not actually fusing during this cycle)
+			_state.pos(0) = _gps_sample_delayed.pos(0);
+			_state.pos(1) = _gps_sample_delayed.pos(1);
+
+			// use GPS accuracy to reset variances
+			setDiag(P,7,8,sq(_gps_sample_delayed.hacc));
+
+			// Fallback to baro height
+			setControlBaroHeight();
+		}
 		ECL_INFO("EKF External Vision Data Stopped");
 
 	}
@@ -807,6 +840,32 @@ void Ekf::controlHeightFusion()
 		_range_sample_delayed.rng += pos_offset_earth(2) / _R_rng_to_earth_2_2;
 	}
 
+	if (_params.vdist_sensor_type == VDIST_SENSOR_EV && _control_status.flags.baro_hgt) {
+		// Fuse vision height later in controlExternalVisionFusion
+		// Use baro as fallback, when vision is not available
+		if (_baro_data_ready && !_baro_hgt_faulty &&
+				 !(_in_range_aid_mode && !_range_data_ready && !_rng_hgt_faulty)) {
+			_fuse_height = true;
+			_in_range_aid_mode = false;
+
+			// we have just switched to using baro height, we don't need to set a height sensor offset
+			// since we track a separate _baro_hgt_offset
+			if (_control_status_prev.flags.baro_hgt != _control_status.flags.baro_hgt) {
+				_hgt_sensor_offset = 0.0f;
+			}
+
+			// Turn off ground effect compensation if it times out or sufficient height has been gained
+			// since takeoff.
+			if (_control_status.flags.gnd_effect) {
+				if ((_time_last_imu - _time_last_gnd_effect_on > GNDEFFECT_TIMEOUT) ||
+						(((_last_on_ground_posD - _state.pos(2)) > _params.gnd_effect_max_hgt) &&
+						 _control_status.flags.in_air)) {
+					_control_status.flags.gnd_effect = false;
+				}
+			}
+
+		}
+	}
 
 	if (_params.vdist_sensor_type == VDIST_SENSOR_BARO) {
 		_in_range_aid_mode = rangeAidConditionsMet(_in_range_aid_mode);
